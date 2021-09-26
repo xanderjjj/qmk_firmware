@@ -6,13 +6,11 @@ CC = avr-gcc
 OBJCOPY = avr-objcopy
 OBJDUMP = avr-objdump
 SIZE = avr-size
-AR = avr-ar rcs
+AR = avr-ar
 NM = avr-nm
 HEX = $(OBJCOPY) -O $(FORMAT) -R .eeprom -R .fuse -R .lock -R .signature
-EEP = $(OBJCOPY) -j .eeprom --set-section-flags=.eeprom="alloc,load" --change-section-lma .eeprom=0 --no-change-warnings -O $(FORMAT) 
+EEP = $(OBJCOPY) -j .eeprom --set-section-flags=.eeprom="alloc,load" --change-section-lma .eeprom=0 --no-change-warnings -O $(FORMAT)
 BIN =
-
-COMMON_VPATH += $(DRIVER_PATH)/avr
 
 COMPILEFLAGS += -funsigned-char
 COMPILEFLAGS += -funsigned-bitfields
@@ -21,12 +19,14 @@ COMPILEFLAGS += -fdata-sections
 COMPILEFLAGS += -fpack-struct
 COMPILEFLAGS += -fshort-enums
 
-CFLAGS += $(COMPILEFLAGS)
+ASFLAGS += $(AVR_ASFLAGS)
+
+CFLAGS += $(COMPILEFLAGS) $(AVR_CFLAGS)
 CFLAGS += -fno-inline-small-functions
 CFLAGS += -fno-strict-aliasing
 
-CPPFLAGS += $(COMPILEFLAGS)
-CPPFLAGS += -fno-exceptions -std=c++11
+CXXFLAGS += $(COMPILEFLAGS)
+CXXFLAGS += -fno-exceptions -std=c++11
 
 LDFLAGS +=-Wl,--gc-sections
 
@@ -87,89 +87,20 @@ DEBUG_PORT = 4242
 DEBUG_HOST = localhost
 
 #============================================================================
-# Autodetect teensy loader
-ifndef TEENSY_LOADER_CLI
-    ifneq (, $(shell which teensy-loader-cli 2>/dev/null))
-        TEENSY_LOADER_CLI ?= teensy-loader-cli
-    else
-        TEENSY_LOADER_CLI ?= teensy_loader_cli
-    endif
-endif
-
-# Program the device.
-program: $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).eep
-	$(PROGRAM_CMD)
-
-teensy: $(BUILD_DIR)/$(TARGET).hex
-	$(TEENSY_LOADER_CLI) -mmcu=$(MCU) -w -v $(BUILD_DIR)/$(TARGET).hex
-	
-BATCHISP ?= batchisp 
-
-flip: $(BUILD_DIR)/$(TARGET).hex
-	$(BATCHISP) -hardware usb -device $(MCU) -operation erase f
-	$(BATCHISP) -hardware usb -device $(MCU) -operation loadbuffer $(BUILD_DIR)/$(TARGET).hex program
-	$(BATCHISP) -hardware usb -device $(MCU) -operation start reset 0
-	
-DFU_PROGRAMMER ?= dfu-programmer
-
-dfu: $(BUILD_DIR)/$(TARGET).hex sizeafter
-	until $(DFU_PROGRAMMER) $(MCU) get bootloader-version; do\
-		echo "Error: Bootloader not found. Trying again in 5s." ;\
-		sleep 5 ;\
-	done
-	if $(DFU_PROGRAMMER) --version 2>&1 | grep -q 0.7 ; then\
-		$(DFU_PROGRAMMER) $(MCU) erase --force;\
-	else\
-		$(DFU_PROGRAMMER) $(MCU) erase;\
-	fi
-	$(DFU_PROGRAMMER) $(MCU) flash $(BUILD_DIR)/$(TARGET).hex
-	$(DFU_PROGRAMMER) $(MCU) reset
-
-dfu-start:
-	$(DFU_PROGRAMMER) $(MCU) reset
-	$(DFU_PROGRAMMER) $(MCU) start
-
-flip-ee: $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).eep
-	$(COPY) $(BUILD_DIR)/$(TARGET).eep $(BUILD_DIR)/$(TARGET)eep.hex
-	$(BATCHISP) -hardware usb -device $(MCU) -operation memory EEPROM erase
-	$(BATCHISP) -hardware usb -device $(MCU) -operation memory EEPROM loadbuffer $(BUILD_DIR)/$(TARGET)eep.hex program
-	$(BATCHISP) -hardware usb -device $(MCU) -operation start reset 0
-	$(REMOVE) $(BUILD_DIR)/$(TARGET)eep.hex
-
-dfu-ee: $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).eep
-	if $(DFU_PROGRAMMER) --version 2>&1 | grep -q 0.7 ; then\
-		$(DFU_PROGRAMMER) $(MCU) flash --eeprom $(BUILD_DIR)/$(TARGET).eep;\
-	else\
-		$(DFU_PROGRAMMER) $(MCU) flash-eeprom $(BUILD_DIR)/$(TARGET).eep;\
-	fi
-	$(DFU_PROGRAMMER) $(MCU) reset
-
-avrdude: $(BUILD_DIR)/$(TARGET).hex
-	if grep -q -s Microsoft /proc/version; then \
-		echo 'ERROR: Pro Micros can not be flashed within the Windows Subsystem for Linux (WSL) currently. Instead, take the .hex file generated and flash it using AVRDUDE, AVRDUDESS, or XLoader.'; \
-	else \
-		ls /dev/tty* > /tmp/1; \
-		echo "Detecting Pro Micro port, reset your Pro Micro now.\c"; \
-		while [ -z $$USB ]; do \
-			sleep 1; \
-			echo ".\c"; \
-			ls /dev/tty* > /tmp/2; \
-			USB=`diff /tmp/1 /tmp/2 | grep -o '/dev/tty.*'`; \
-		done; \
-		echo ""; \
-		echo "Detected Pro Micro port at $$USB"; \
-		sleep 1; \
-		avrdude -p $(MCU) -c avr109 -P $$USB -U flash:w:$(BUILD_DIR)/$(TARGET).hex; \
-	fi
 
 # Convert hex to bin.
 bin: $(BUILD_DIR)/$(TARGET).hex
+ifeq ($(BOOTLOADER),lufa-ms)
+	$(eval BIN_PADDING=$(shell n=`expr 32768 - $(BOOTLOADER_SIZE)` && echo $$(($$n)) || echo 0))
+	$(OBJCOPY) -Iihex -Obinary $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin --pad-to $(BIN_PADDING)
+else
 	$(OBJCOPY) -Iihex -Obinary $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
+endif
 	$(COPY) $(BUILD_DIR)/$(TARGET).bin $(TARGET).bin;
 
 # copy bin to FLASH.bin
 flashbin: bin
-	$(COPY) $(BUILD_DIR)/$(TARGET).bin FLASH.bin; 
+	$(COPY) $(BUILD_DIR)/$(TARGET).bin FLASH.bin;
 
 # Generate avr-gdb config/init file which does the following:
 #     define the reset signal, load the target file, connect to target, and set
@@ -220,3 +151,29 @@ extcoff: $(BUILD_DIR)/$(TARGET).elf
 	@$(SECHO) $(MSG_EXTENDED_COFF) $(BUILD_DIR)/$(TARGET).cof
 	$(COFFCONVERT) -O coff-ext-avr $< $(BUILD_DIR)/$(TARGET).cof
 
+ifeq ($(strip $(BOOTLOADER)), qmk-dfu)
+QMK_BOOTLOADER_TYPE = DFU
+else ifeq ($(strip $(BOOTLOADER)), qmk-hid)
+QMK_BOOTLOADER_TYPE = HID
+endif
+
+bootloader:
+ifeq ($(strip $(QMK_BOOTLOADER_TYPE)),)
+	$(error Please set BOOTLOADER to "qmk-dfu" or "qmk-hid" first!)
+else
+	make -C lib/lufa/Bootloaders/$(QMK_BOOTLOADER_TYPE)/ clean
+	$(QMK_BIN) generate-dfu-header --quiet --keyboard $(KEYBOARD) --output lib/lufa/Bootloaders/$(QMK_BOOTLOADER_TYPE)/Keyboard.h
+	$(eval MAX_SIZE=$(shell n=`$(CC) -E -mmcu=$(MCU) -D__ASSEMBLER__ $(CFLAGS) $(OPT_DEFS) tmk_core/common/avr/bootloader_size.c 2> /dev/null | sed -ne 's/\r//;/^#/n;/^AVR_SIZE:/,$${s/^AVR_SIZE: //;p;}'` && echo $$(($$n)) || echo 0))
+	$(eval PROGRAM_SIZE_KB=$(shell n=`expr $(MAX_SIZE) / 1024` && echo $$(($$n)) || echo 0))
+	$(eval BOOT_SECTION_SIZE_KB=$(shell n=`expr  $(BOOTLOADER_SIZE) / 1024` && echo $$(($$n)) || echo 0))
+	$(eval FLASH_SIZE_KB=$(shell n=`expr $(PROGRAM_SIZE_KB) + $(BOOT_SECTION_SIZE_KB)` && echo $$(($$n)) || echo 0))
+	make -C lib/lufa/Bootloaders/$(QMK_BOOTLOADER_TYPE)/ MCU=$(MCU) ARCH=$(ARCH) F_CPU=$(F_CPU) FLASH_SIZE_KB=$(FLASH_SIZE_KB) BOOT_SECTION_SIZE_KB=$(BOOT_SECTION_SIZE_KB)
+	printf "Bootloader$(QMK_BOOTLOADER_TYPE).hex copied to $(TARGET)_bootloader.hex\n"
+	cp lib/lufa/Bootloaders/$(QMK_BOOTLOADER_TYPE)/Bootloader$(QMK_BOOTLOADER_TYPE).hex $(TARGET)_bootloader.hex
+endif
+
+production: $(BUILD_DIR)/$(TARGET).hex bootloader cpfirmware
+	@cat $(BUILD_DIR)/$(TARGET).hex | awk '/^:00000001FF/ == 0' > $(TARGET)_production.hex
+	@cat $(TARGET)_bootloader.hex >> $(TARGET)_production.hex
+	echo "File sizes:"
+	$(SIZE) $(TARGET).hex $(TARGET)_bootloader.hex $(TARGET)_production.hex

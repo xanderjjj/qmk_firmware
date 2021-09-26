@@ -1,35 +1,23 @@
-AMJ40 keyboard firmware
-======================
+# AMJ40
+
+![AMJ40](https://raw.githubusercontent.com/noroadsleft/qmk_images/master/keyboards/amj40/AMJ40-Keyboard-Side-scaled_640.jpg)\
+[PCB photo](https://raw.githubusercontent.com/noroadsleft/qmk_images/master/keyboards/amj40/DSC_1718-768x512_640)
+
 DIY/Assembled compact 40% keyboard.
 
-Ported by N.Hou from the original TMK firmware.
+* Keyboard Maintainer: QMK Community
+* Hardware Supported: AMJ40 PCB
+* Hardware Availability: no longer available
+* References: [Flashquark](https://flashquark.com/product/amj40-40-mechanical-keyboard-kit/), [geekhack](https://geekhack.org/index.php?topic=87961.0)
 
-*Supports both backlight LEDs as well as RGB underglow. 
+Make example for this keyboard (after setting up your build environment):
 
-*For reference, the AMJ40 uses pin D3 for underglow lighting.
+    make amj40:default
 
-## Quantum MK Firmware
+Flashing example for this keyboard:
 
-For the full Quantum feature list, see [the parent readme.md](/readme.md).
+    make amj40:default:flash
 
-## Building
+To reset the board into bootloader mode, hold the key at the top left of the keyboard while connecting the USB cable (also erases persistent settings).
 
-Download or clone the whole firmware and navigate to the keyboards/amj40
-folder. Once your dev env is setup, you'll be able to type `make` to generate
-your .hex - you can then use `make dfu` to program your PCB once you hit the
-reset button. 
-
-Depending on which keymap you would like to use, you will have to compile
-slightly differently.
-
-### Default
-To build with the default keymap, simply run `sudo make all`.
-The .hex file will appear in the root of the qmk firmware folder.
-
-
-
-
-### Original tmk firmware
-The original firmware that was used to port to qmk can be found [here](https://github.com/AMJKeyboard/AMJ40).
-
-
+See the [build environment setup](https://docs.qmk.fm/#/getting_started_build_tools) and the [make instructions](https://docs.qmk.fm/#/getting_started_make_guide) for more information. Brand new to QMK? Start with our [Complete Newbs Guide](https://docs.qmk.fm/#/newbs).

@@ -1,5 +1,3 @@
 BACKLIGHT_ENABLE = no
 
-ifndef QUANTUM_DIR
-	include ../../../Makefile
-endif
+LAYOUTS = split_3x5_3

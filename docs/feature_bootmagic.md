@@ -1,29 +1,62 @@
-# Bootmagic
+# Bootmagic Lite :id=bootmagic-lite
 
-<!-- FIXME: Describe the bootmagic feature here. -->
+The Bootmagic Lite feature that only handles jumping into the bootloader. This is great for boards that don't have a physical reset button, giving you a way to jump into the bootloader
 
-## Bootmagic Keycodes
+On some keyboards Bootmagic Lite is disabled by default. If this is the case, it must be explicitly enabled in your `rules.mk` with:
 
-Shortcuts for bootmagic options. You can use these even when bootmagic is off.
+```make
+BOOTMAGIC_ENABLE = yes
+```
 
-|Name|Description|
-|----|-----------|
-|`MAGIC_SWAP_CONTROL_CAPSLOCK`|Swap Capslock and Left Control|
-|`MAGIC_CAPSLOCK_TO_CONTROL`|Treat Capslock like a Control Key|
-|`MAGIC_SWAP_LALT_LGUI`|Swap the left Alt and GUI keys|
-|`MAGIC_SWAP_RALT_RGUI`|Swap the right Alt and GUI keys|
-|`MAGIC_NO_GUI`|Disable the GUI key|
-|`MAGIC_SWAP_GRAVE_ESC`|Swap the Grave and Esc key.|
-|`MAGIC_SWAP_BACKSLASH_BACKSPACE`|Swap backslack and backspace|
-|`MAGIC_HOST_NKRO`|Force NKRO on|
-|`MAGIC_SWAP_ALT_GUI`/`AG_SWAP`|Swap Alt and Gui on both sides|
-|`MAGIC_UNSWAP_CONTROL_CAPSLOCK`|Disable the Control/Capslock swap|
-|`MAGIC_UNCAPSLOCK_TO_CONTROL`|Disable treating Capslock like Control |
-|`MAGIC_UNSWAP_LALT_LGUI`|Disable Left Alt and GUI switching|
-|`MAGIC_UNSWAP_RALT_RGUI`|Disable Right Alt and GUI switching|
-|`MAGIC_UNNO_GUI`|Enable the GUI key |
-|`MAGIC_UNSWAP_GRAVE_ESC`|Disable the Grave/Esc swap |
-|`MAGIC_UNSWAP_BACKSLASH_BACKSPACE`|Disable the backslash/backspace swap|
-|`MAGIC_UNHOST_NKRO`|Force NKRO off|
-|`MAGIC_UNSWAP_ALT_GUI`/`AG_NORM`|Disable the Alt/GUI switching|
-|`MAGIC_TOGGLE_NKRO`|Turn NKRO on or off|
+?> You may see `lite` being used in place of `yes`.
+
+Additionally, you may want to specify which key to use. This is especially useful for keyboards that have unusual matrices. To do so, you need to specify the row and column of the key that you want to use. Add these entries to your `config.h` file:
+
+```c
+#define BOOTMAGIC_LITE_ROW 0
+#define BOOTMAGIC_LITE_COLUMN 1
+```
+
+By default, these are set to 0 and 0, which is usually the "ESC" key on a majority of keyboards.
+
+And to trigger the bootloader, you hold this key down when plugging the keyboard in. Just the single key.
+
+!> Using Bootmagic Lite will **always reset** the EEPROM, so you will lose any settings that have been saved.
+
+## Split Keyboards
+
+When handedness is predetermined via an option like `SPLIT_HAND_PIN`, you might need to configure a different key between halves. To do so, add these entries to your `config.h` file:
+
+```c
+#define BOOTMAGIC_LITE_ROW_RIGHT 4
+#define BOOTMAGIC_LITE_COLUMN_RIGHT 1
+```
+
+By default, these values are not set.
+
+## Advanced Bootmagic Lite
+
+The `bootmagic_lite` function is defined weakly, so that you can replace this in your code, if you need. A great example of this is the Zeal60 boards that have some additional handling needed.
+
+To replace the function, all you need to do is add something like this to your code:
+
+```c
+void bootmagic_lite(void) {
+    matrix_scan();
+    wait_ms(DEBOUNCE * 2);
+    matrix_scan();
+
+    if (matrix_get_row(BOOTMAGIC_LITE_ROW) & (1 << BOOTMAGIC_LITE_COLUMN)) {
+      // Jump to bootloader.
+      bootloader_jump();
+    }
+}
+```
+
+You can additional feature here. For instance, resetting the EEPROM or requiring additional keys to be pressed to trigger Bootmagic Lite. Keep in mind that `bootmagic_lite` is called before a majority of features are initialized in the firmware.
+
+## Addenda
+
+To manipulate settings that were formerly configured through the now-deprecated full Bootmagic feature, see [Magic Keycodes](keycodes_magic.md).
+
+The Command feature, formerly known as Magic, also allows you to control different aspects of your keyboard. While it shares some functionality with Magic Keycodes, it also allows you to do things that Magic Keycodes cannot, such as printing version information to the console. For more information, see [Command](feature_command.md).
